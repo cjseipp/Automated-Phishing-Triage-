@@ -1,7 +1,6 @@
 """Offline, non-executing analysis of RFC 5322 .eml messages."""
 from __future__ import annotations
 import hashlib
-import json
 import re
 from email import policy
 from email.parser import BytesParser
@@ -101,14 +100,26 @@ def analyze_bytes(raw: bytes) -> dict:
                         findings.append({'type': 'display_url_mismatch', 'detail': 'Visible URL hostname differs from hyperlink destination.'})
         for url in URL_RE.findall(body):
             links.append({'url': url.rstrip('.,);'), 'display_text': '', 'source': part.get_content_type()})
-    unique = []
-    seen = set()
+    # One entry per exact destination URL, retaining all observed contexts.
+    unique_by_url = {}
     for link in links:
-        key = (link['url'], link['source'])
-        if key not in seen:
-            seen.add(key)
-            unique.append(link)
-    return {'sha256_email': hashlib.sha256(raw).hexdigest(), 'headers': headers, 'links': unique, 'attachments': attachments, 'findings': findings, 'analysis_notes': ['Offline static analysis only; no URLs visited or attachments executed.', 'Authentication-Results headers are unverified and may be forged; trusted receiving-server context is required.', 'No threat intelligence or definitive maliciousness assessment in Phase 1.']}
+        url = link['url']
+        if url not in unique_by_url:
+            unique_by_url[url] = {'url': url, 'display_text': link['display_text'],
+                                  'source': link['source'], 'sources': [], 'display_texts': []}
+        entry = unique_by_url[url]
+        if link['source'] not in entry['sources']:
+            entry['sources'].append(link['source'])
+        if link['display_text'] and link['display_text'] not in entry['display_texts']:
+            entry['display_texts'].append(link['display_text'])
+    # Repeated identical findings do not increase a score.
+    findings = list({f['type']: f for f in findings}.values())
+    weights = {'display_url_mismatch': 50, 'reply_to_mismatch': 15}
+    contributions = [{'type': f['type'], 'points': weights.get(f['type'], 0),
+                      'reason': f['detail']} for f in findings]
+    score = min(100, sum(c['points'] for c in contributions))
+    severity = 'high' if score >= 60 else 'medium' if score >= 30 else 'low' if score > 0 else 'no_indicators_detected'
+    return {'sha256_email': hashlib.sha256(raw).hexdigest(), 'headers': headers, 'links': list(unique_by_url.values()), 'attachments': attachments, 'findings': findings, 'risk': {'score': score, 'severity': severity, 'contributions': contributions, 'method': 'heuristic_v1', 'note': 'Triage priority only; not probability of maliciousness or a clean verdict.'}, 'analysis_notes': ['Offline static analysis only; no URLs visited or attachments executed.', 'Authentication-Results headers are unverified and may be forged; trusted receiving-server context is required.', 'No threat intelligence or definitive maliciousness assessment in Phase 1.']}
 
 
 def analyze_file(path: str | Path) -> dict:

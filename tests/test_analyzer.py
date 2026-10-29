@@ -16,6 +16,18 @@ class AnalyzerTests(unittest.TestCase):
         report = analyze_file(ROOT / 'samples/invoice_attachment.eml')
         self.assertEqual(len(report['attachments']), 1)
         self.assertEqual(len(report['attachments'][0]['sha256']), 64)
+    def test_url_dedup_and_risk(self):
+        report = analyze_file(ROOT / 'samples/suspicious_login.eml')
+        urls = [link['url'] for link in report['links']]
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertEqual(len(urls), 2)
+        self.assertEqual(report['risk']['score'], 65)
+        self.assertEqual(report['risk']['severity'], 'high')
+        self.assertEqual(len(report['risk']['contributions']), 2)
+    def test_clean_is_not_proven_safe(self):
+        report = analyze_file(ROOT / 'samples/legitimate_notice.eml')
+        self.assertEqual(report['risk']['score'], 0)
+        self.assertEqual(report['risk']['severity'], 'no_indicators_detected')
     def test_limit(self):
         with self.assertRaises(ValueError):
             analyze_bytes(b'x' * (10 * 1024 * 1024 + 1))
