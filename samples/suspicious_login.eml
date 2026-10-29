@@ -1,0 +1,9 @@
+From: "IT Support" <support@nonprofit-help.example>
+To: director@nonprofit.example
+Reply-To: verification@external-service.example
+Subject: URGENT: Your account will be disabled
+Date: Tue, 27 Oct 2026 09:00:00 -0400
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Your account will be suspended in 24 hours.</p><a href="https://login-check.example/verify">https://microsoft.com/security</a></body></html>

@@ -218,3 +218,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Project-specific ---
+.env.*
+!.env.example
+# Generated reports may contain sensitive email content.
+reports/*
+!reports/.gitkeep
+# Never commit real client emails, logs, or extracted evidence.
+private_samples/
+client_data/
+*.zip

@@ -1,0 +1,21 @@
+From: Billing <billing@vendor.example>
+To: accounts@nonprofit.example
+Subject: Invoice attached
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============5552775253185722250=="
+
+--===============5552775253185722250==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Please review the attached sample invoice.
+
+--===============5552775253185722250==
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="invoice-demo.txt"
+MIME-Version: 1.0
+
+U0FGRSBERU1PTlNUUkFUSU9OIEZJTEUgT05MWQpJbnZvaWNlIDEyMwo=
+
+--===============5552775253185722250==--
