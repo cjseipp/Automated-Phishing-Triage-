@@ -1,0 +1,23 @@
+From: "Payroll Team" <payroll@hr-portal.example>
+To: staff@nonprofit.example
+Subject: Action required: review your updated pay statement
+Date: Wed, 28 Oct 2026 08:15:00 -0400
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============7311965402865317111=="
+
+--===============7311965402865317111==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Your pay statement has changed. Open the attached document to review it,
+or view it online at https://bit.ly/demo-statement before Friday.
+
+--===============7311965402865317111==
+Content-Type: text/html
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Pay_Statement.htm"
+
+PGh0bWw+PGJvZHk+PHA+U0FGRSBERU1PTlNUUkFUSU9OIEZJTEUgT05MWSAtIGEgcmVhbCBsdXJl
+IHdvdWxkIHNob3cgYSBmYWtlIHNpZ24taW4gcGFnZSBoZXJlLjwvcD48L2JvZHk+PC9odG1sPgo=
+
+--===============7311965402865317111==--

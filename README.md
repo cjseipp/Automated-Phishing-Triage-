@@ -119,18 +119,26 @@ automated-phishing-triage/
 |
 |-- phishing_triage/
 |   |-- __init__.py
-|   |-- analyzer.py
+|   |-- analyzer.py      # parse -> rules -> score pipeline
+|   |-- parse.py         # .eml parsing, link/attachment extraction
+|   |-- domains.py       # hostname and registrable-domain helpers
+|   |-- rules.py         # one function per detection rule
+|   |-- scoring.py       # rule weights and severity bands
 |   |-- cli.py
 |
 |-- samples/
 |   |-- legitimate_notice.eml
 |   |-- suspicious_login.eml
 |   |-- invoice_attachment.eml
+|   |-- html_attachment_lure.eml
 |
 |-- reports/
 |
 |-- tests/
 |   |-- test_analyzer.py
+|   |-- test_rules.py
+|
+|-- docs/                # phase upgrade notes
 |
 |-- desktop/
 |-- browser/

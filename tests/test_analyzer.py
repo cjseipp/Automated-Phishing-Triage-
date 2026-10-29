@@ -21,9 +21,10 @@ class AnalyzerTests(unittest.TestCase):
         urls = [link['url'] for link in report['links']]
         self.assertEqual(len(urls), len(set(urls)))
         self.assertEqual(len(urls), 2)
-        self.assertEqual(report['risk']['score'], 65)
+        # display_url_mismatch 50 + reply_to_mismatch 15 + link_domain_mismatch 10
+        self.assertEqual(report['risk']['score'], 75)
         self.assertEqual(report['risk']['severity'], 'high')
-        self.assertEqual(len(report['risk']['contributions']), 2)
+        self.assertEqual(len(report['risk']['contributions']), 3)
     def test_clean_is_not_proven_safe(self):
         report = analyze_file(ROOT / 'samples/legitimate_notice.eml')
         self.assertEqual(report['risk']['score'], 0)

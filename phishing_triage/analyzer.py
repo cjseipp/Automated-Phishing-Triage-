@@ -1,125 +1,24 @@
-"""Offline, non-executing analysis of RFC 5322 .eml messages."""
+"""Offline, non-executing analysis of RFC 5322 .eml messages: parse -> rules -> score."""
 from __future__ import annotations
-import hashlib
-import re
-from email import policy
-from email.parser import BytesParser
-from email.utils import getaddresses
-from html.parser import HTMLParser
+from dataclasses import asdict
 from pathlib import Path
-from urllib.parse import urlsplit
 
-URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
-MAX_EMAIL_BYTES = 10 * 1024 * 1024
-MAX_PARTS = 100
-MAX_TEXT_CHARS = 1_000_000
-
-class LinkParser(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.links = []
-        self.active = None
-
-    def handle_starttag(self, tag, attrs):
-        if tag.lower() == 'a':
-            attrs = dict(attrs)
-            self.active = {'url': attrs.get('href', ''), 'display_text': ''}
-
-    def handle_data(self, data):
-        if self.active is not None:
-            self.active['display_text'] += data
-
-    def handle_endtag(self, tag):
-        if tag.lower() == 'a' and self.active is not None:
-            self.links.append(self.active)
-            self.active = None
-
-
-def _domain(address):
-    return address.rsplit('@', 1)[-1].lower() if '@' in address else ''
-
-
-def _hostname(url):
-    try:
-        return (urlsplit(url).hostname or '').lower()
-    except ValueError:
-        return ''
+from .parse import MAX_EMAIL_BYTES, parse_bytes
+from .rules import run_rules
+from .scoring import score
 
 
 def analyze_bytes(raw: bytes) -> dict:
-    if len(raw) > MAX_EMAIL_BYTES:
-        raise ValueError('Email exceeds 10 MiB size limit')
-    msg = BytesParser(policy=policy.default).parsebytes(raw)
-    from_address = getaddresses([str(msg.get('From', ''))])
-    reply_address = getaddresses([str(msg.get('Reply-To', ''))])
-    sender = from_address[0][1] if from_address else ''
-    reply_to = reply_address[0][1] if reply_address else ''
-    headers = {
-        'from': str(msg.get('From', '')),
-        'sender_address': sender,
-        'to': str(msg.get('To', '')),
-        'subject': str(msg.get('Subject', '')),
-        'reply_to': str(msg.get('Reply-To', '')),
-        'date': str(msg.get('Date', '')),
-        'received': [str(v) for v in msg.get_all('Received', [])],
-        'authentication_results_unverified': [str(v) for v in msg.get_all('Authentication-Results', [])],
-    }
-    findings = []
-    if reply_to and sender and reply_to.lower() != sender.lower():
-        findings.append({'type': 'reply_to_mismatch', 'detail': 'Reply-To differs from From; may be legitimate.'})
-    links, attachments = [], []
-    parts = list(msg.walk())
-    if len(parts) > MAX_PARTS:
-        raise ValueError('Email exceeds MIME part count limit')
-    for part in parts:
-        if part.is_multipart():
-            continue
-        data = part.get_payload(decode=True)
-        if data is None:
-            data = b''
-        filename = part.get_filename()
-        if filename is not None or part.get_content_disposition() == 'attachment':
-            attachments.append({'filename': filename or '(unnamed)', 'size_bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'content_type': part.get_content_type()})
-            continue
-        if part.get_content_type() not in ('text/plain', 'text/html'):
-            continue
-        charset = part.get_content_charset() or 'utf-8'
-        try:
-            body = data.decode(charset, errors='replace')[:MAX_TEXT_CHARS]
-        except LookupError:
-            body = data.decode('utf-8', errors='replace')[:MAX_TEXT_CHARS]
-        if part.get_content_type() == 'text/html':
-            parser = LinkParser()
-            parser.feed(body)
-            for link in parser.links:
-                url = link['url']
-                if url.lower().startswith(('http://', 'https://')):
-                    links.append({'url': url, 'display_text': link['display_text'].strip(), 'source': 'html_anchor'})
-                    displayed = link['display_text'].strip()
-                    if displayed.lower().startswith(('http://', 'https://')) and _hostname(displayed) != _hostname(url):
-                        findings.append({'type': 'display_url_mismatch', 'detail': 'Visible URL hostname differs from hyperlink destination.'})
-        for url in URL_RE.findall(body):
-            links.append({'url': url.rstrip('.,);'), 'display_text': '', 'source': part.get_content_type()})
-    # One entry per exact destination URL, retaining all observed contexts.
-    unique_by_url = {}
-    for link in links:
-        url = link['url']
-        if url not in unique_by_url:
-            unique_by_url[url] = {'url': url, 'display_text': link['display_text'],
-                                  'source': link['source'], 'sources': [], 'display_texts': []}
-        entry = unique_by_url[url]
-        if link['source'] not in entry['sources']:
-            entry['sources'].append(link['source'])
-        if link['display_text'] and link['display_text'] not in entry['display_texts']:
-            entry['display_texts'].append(link['display_text'])
-    # Repeated identical findings do not increase a score.
-    findings = list({f['type']: f for f in findings}.values())
-    weights = {'display_url_mismatch': 50, 'reply_to_mismatch': 15}
-    contributions = [{'type': f['type'], 'points': weights.get(f['type'], 0),
-                      'reason': f['detail']} for f in findings]
-    score = min(100, sum(c['points'] for c in contributions))
-    severity = 'high' if score >= 60 else 'medium' if score >= 30 else 'low' if score > 0 else 'no_indicators_detected'
-    return {'sha256_email': hashlib.sha256(raw).hexdigest(), 'headers': headers, 'links': list(unique_by_url.values()), 'attachments': attachments, 'findings': findings, 'risk': {'score': score, 'severity': severity, 'contributions': contributions, 'method': 'heuristic_v1', 'note': 'Triage priority only; not probability of maliciousness or a clean verdict.'}, 'analysis_notes': ['Offline static analysis only; no URLs visited or attachments executed.', 'Authentication-Results headers are unverified and may be forged; trusted receiving-server context is required.', 'No threat intelligence or definitive maliciousness assessment in Phase 1.']}
+    email = parse_bytes(raw)
+    findings = run_rules(email)
+    return {'sha256_email': email.sha256, 'headers': email.headers, 'links': email.links,
+            'attachments': email.attachments, 'findings': [asdict(f) for f in findings], 'risk': score(findings),
+            'analysis_notes': ['Offline static analysis only; no URLs visited or attachments executed.',
+                               'Authentication-Results headers are unverified and may be forged; trusted '
+                               'receiving-server context is required.',
+                               'Domain comparisons use an approximate registrable-domain rule, not the full '
+                               'Public Suffix List.',
+                               'No threat intelligence or definitive maliciousness assessment in Phase 1.']}
 
 
 def analyze_file(path: str | Path) -> dict:
